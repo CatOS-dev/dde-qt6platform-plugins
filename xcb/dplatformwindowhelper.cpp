@@ -43,6 +43,18 @@ PUBLIC_CLASS(QWheelEvent, DPlatformWindowHelper);
 
 QHash<const QPlatformWindow*, DPlatformWindowHelper*> DPlatformWindowHelper::mapped;
 
+static Qt::WindowFlags dxcbFrameFlags(Qt::WindowFlags flags)
+{
+    // Override-redirect windows already bypass WM stacking. A separate
+    // stays-on-top request on the DXCB frame prevents its raster child
+    // from becoming visible on X11.
+    if (flags.testFlag(Qt::X11BypassWindowManagerHint))
+        flags &= ~Qt::WindowStaysOnTopHint;
+
+    return (flags | Qt::FramelessWindowHint | Qt::CustomizeWindowHint
+            | Qt::NoDropShadowWindowHint) & ~Qt::WindowMinMaxButtonsHint;
+}
+
 DPlatformWindowHelper::DPlatformWindowHelper(QNativeWindow *window)
     : QObject(window->window())
     , m_nativeWindow(window)
@@ -50,7 +62,7 @@ DPlatformWindowHelper::DPlatformWindowHelper(QNativeWindow *window)
     mapped[window] = this;
 
     m_frameWindow = new DFrameWindow(window->window());
-    m_frameWindow->setFlags((window->window()->flags() | Qt::FramelessWindowHint | Qt::CustomizeWindowHint | Qt::NoDropShadowWindowHint) & ~Qt::WindowMinMaxButtonsHint);
+    m_frameWindow->setFlags(dxcbFrameFlags(window->window()->flags()));
     m_frameWindow->create();
     m_frameWindow->installEventFilter(this);
     m_frameWindow->setShadowRadius(getShadowRadius());
@@ -344,7 +356,7 @@ void DPlatformWindowHelper::setVisible(bool visible)
 
 void DPlatformWindowHelper::setWindowFlags(Qt::WindowFlags flags)
 {
-    me()->m_frameWindow->setFlags((flags | Qt::FramelessWindowHint | Qt::CustomizeWindowHint | Qt::NoDropShadowWindowHint) & ~Qt::WindowMinMaxButtonsHint);
+    me()->m_frameWindow->setFlags(dxcbFrameFlags(flags));
     window()->QNativeWindow::setWindowFlags(flags);
 }
 
@@ -554,6 +566,15 @@ bool DPlatformWindowHelper::windowRedirectContent(QWindow *window)
     // 修复dde-dock在某些2D环境（如HW云桌面）中不显示窗口内容
     if (!DXcbWMSupport::instance()->hasComposite()
             && qEnvironmentVariableIsEmpty("DXCB_REDIRECT_CONTENT_WITH_NO_COMPOSITE")) {
+        return false;
+    }
+
+    // KWin/X11 already composites the native child of a DXCB frame.
+    // Manually redirecting that raster child leaves the frame without
+    // its contents. Keep native composition on this backend.
+    if (window->surfaceType() == QSurface::RasterSurface
+            && DXcbWMSupport::instance()->isKwin()
+            && DXcbWMSupport::instance()->hasComposite()) {
         return false;
     }
 
