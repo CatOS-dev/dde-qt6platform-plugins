@@ -582,15 +582,6 @@ bool DPlatformWindowHelper::windowRedirectContent(QWindow *window)
         return false;
     }
 
-    // KWin/X11 already composites the native child of a DXCB frame.
-    // Manually redirecting that raster child leaves the frame without
-    // its contents. Keep native composition on this backend.
-    if (window->surfaceType() == QSurface::RasterSurface
-            && DXcbWMSupport::instance()->isKwin()
-            && DXcbWMSupport::instance()->hasComposite()) {
-        return false;
-    }
-
     const QVariant &value = window->property(redirectContent);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
