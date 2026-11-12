@@ -45,10 +45,10 @@ QHash<const QPlatformWindow*, DPlatformWindowHelper*> DPlatformWindowHelper::map
 
 static Qt::WindowFlags dxcbFrameFlags(Qt::WindowFlags flags)
 {
-    // Override-redirect windows already bypass WM stacking. A separate
-    // stays-on-top request on the DXCB frame prevents its raster child
-    // from becoming visible on X11.
-    if (flags.testFlag(Qt::X11BypassWindowManagerHint))
+    // On KWin/X11, combining override-redirect and stays-on-top on the
+    // DXCB frame can hide its raster child. Preserve flags on other WMs.
+    if (DXcbWMSupport::instance()->isKwin()
+            && flags.testFlag(Qt::X11BypassWindowManagerHint))
         flags &= ~Qt::WindowStaysOnTopHint;
 
     return (flags | Qt::FramelessWindowHint | Qt::CustomizeWindowHint
